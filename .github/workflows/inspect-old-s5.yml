@@ -1,0 +1,47 @@
+name: inspect-old-s5
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect public S5 reference PRs
+        run: |
+          set -euo pipefail
+          base="LIDR-academy/full-stack-adonisjs-s5-base-202606-sr-2"
+          for pr in 15 12 25 10 26
+          do
+            echo "===== PR $pr META ====="
+            curl -L -sS -H 'Accept: application/vnd.github+json' -H 'User-Agent: module5-reference'               "https://api.github.com/repos/$base/pulls/$pr" > "/tmp/pr-$pr.json"
+            python3 - "$pr" <<'PY'
+import json,sys
+pr=sys.argv[1]
+d=json.load(open(f"/tmp/pr-{pr}.json"))
+print({
+ "title":d.get("title"),
+ "body":d.get("body"),
+ "head_label":(d.get("head") or {}).get("label"),
+ "head_ref":(d.get("head") or {}).get("ref"),
+ "head_repo":((d.get("head") or {}).get("repo") or {}).get("full_name"),
+ "user":(d.get("user") or {}).get("login"),
+ "html_url":d.get("html_url")
+})
+PY
+            echo "===== PR $pr FILES ====="
+            curl -L -sS -H 'Accept: application/vnd.github+json' -H 'User-Agent: module5-reference'               "https://api.github.com/repos/$base/pulls/$pr/files?per_page=100" > "/tmp/files-$pr.json"
+            python3 - "$pr" <<'PY'
+import json,sys
+pr=sys.argv[1]
+d=json.load(open(f"/tmp/files-{pr}.json"))
+for x in d:
+    print(x.get("filename"), x.get("status"), x.get("additions"), x.get("deletions"))
+    patch=x.get("patch")
+    if patch and len(patch)<12000:
+        print("---PATCH---")
+        print(patch)
+PY
+          done
