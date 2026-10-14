@@ -1,0 +1,47 @@
+name: probe-s5-main
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find and mirror s5/start
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          found=""
+          for r in             LIDR-academy/flowsync-ai4devs-202609-seniors-2             LIDR-academy/flowsync-ai4devs             LIDR-academy/flowsync-ai4devs-202609-seniors-1
+          do
+            echo "Checking $r"
+            if git ls-remote --exit-code --heads "https://github.com/$r.git" refs/heads/s5/start > /tmp/ref 2>/tmp/err; then
+              found="$r"
+              echo "FOUND $r"
+              cat /tmp/ref
+              break
+            fi
+            echo "MISS $r"
+            cat /tmp/err || true
+          done
+
+          if [ -z "$found" ]; then
+            echo "No s5/start branch found in candidate repositories."
+            exit 2
+          fi
+
+          git clone --depth 1 --single-branch --branch s5/start "https://github.com/$found.git" source
+          cd source
+          echo "SOURCE=$found"
+          echo "HEAD=$(git rev-parse HEAD)"
+          echo "---- README START ----"
+          cat README.md
+          echo "---- README END ----"
+
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/s5/start --force
