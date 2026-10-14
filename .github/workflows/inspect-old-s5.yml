@@ -16,32 +16,12 @@ jobs:
           for pr in 15 12 25 10 26
           do
             echo "===== PR $pr META ====="
-            curl -L -sS -H 'Accept: application/vnd.github+json' -H 'User-Agent: module5-reference'               "https://api.github.com/repos/$base/pulls/$pr" > "/tmp/pr-$pr.json"
-            python3 - "$pr" <<'PY'
-import json,sys
-pr=sys.argv[1]
-d=json.load(open(f"/tmp/pr-{pr}.json"))
-print({
- "title":d.get("title"),
- "body":d.get("body"),
- "head_label":(d.get("head") or {}).get("label"),
- "head_ref":(d.get("head") or {}).get("ref"),
- "head_repo":((d.get("head") or {}).get("repo") or {}).get("full_name"),
- "user":(d.get("user") or {}).get("login"),
- "html_url":d.get("html_url")
-})
-PY
+            curl -L -sS -H 'Accept: application/vnd.github+json' -H 'User-Agent: module5-reference' "https://api.github.com/repos/$base/pulls/$pr" > "/tmp/pr-$pr.json"
+            jq '{title, body, html_url, user: .user.login, head_label: .head.label, head_ref: .head.ref, head_repo: .head.repo.full_name}' "/tmp/pr-$pr.json"
             echo "===== PR $pr FILES ====="
-            curl -L -sS -H 'Accept: application/vnd.github+json' -H 'User-Agent: module5-reference'               "https://api.github.com/repos/$base/pulls/$pr/files?per_page=100" > "/tmp/files-$pr.json"
-            python3 - "$pr" <<'PY'
-import json,sys
-pr=sys.argv[1]
-d=json.load(open(f"/tmp/files-{pr}.json"))
-for x in d:
-    print(x.get("filename"), x.get("status"), x.get("additions"), x.get("deletions"))
-    patch=x.get("patch")
-    if patch and len(patch)<12000:
-        print("---PATCH---")
-        print(patch)
-PY
+            curl -L -sS -H 'Accept: application/vnd.github+json' -H 'User-Agent: module5-reference' "https://api.github.com/repos/$base/pulls/$pr/files?per_page=100" > "/tmp/files-$pr.json"
+            jq -r '.[] | [.filename,.status,.additions,.deletions] | @tsv' "/tmp/files-$pr.json"
+            echo "===== PR $pr PATCHES ====="
+            jq -r '.[] | select(.patch != null) | "### " + .filename + "\n" + .patch' "/tmp/files-$pr.json" | head -c 60000
+            echo
           done
