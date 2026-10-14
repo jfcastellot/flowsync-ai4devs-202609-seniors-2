@@ -1,59 +1,21 @@
-name: mirror-s4-end-as-s5-start
+name: list-upstream-branches
 
 on:
   push:
     branches:
       - main
 
-permissions:
-  contents: write
-
 jobs:
-  mirror:
+  inspect:
     runs-on: ubuntu-latest
     steps:
-      - name: Find s4/end and mirror as s5/start
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: List public branches
         run: |
-          set -euo pipefail
-          found=""
+          set -u
           for r in             LIDR-academy/flowsync-ai4devs-202609-seniors-2             LIDR-academy/flowsync-ai4devs             LIDR-academy/flowsync-ai4devs-202609-seniors-1
           do
-            echo "Checking s4/end README for $r"
-            raw="https://raw.githubusercontent.com/$r/s4/end/README.md"
-            status="$(curl -L -sS -o /tmp/readme -w '%{http_code}' -H 'User-Agent: module5-probe' "$raw" || true)"
-            echo "HTTP $status for $raw"
-            if [ "$status" = "200" ]; then
-              found="$r"
-              echo "FOUND $r"
-              break
-            fi
+            echo "===== $r repository ====="
+            curl -L -sS -H 'Accept: application/vnd.github+json' -H 'User-Agent: module5-probe'               "https://api.github.com/repos/$r" | python3 -c 'import json,sys; d=json.load(sys.stdin); print({k:d.get(k) for k in ["full_name","private","visibility","pushed_at","default_branch","message"]})' || true
+            echo "===== $r branches ====="
+            curl -L -sS -H 'Accept: application/vnd.github+json' -H 'User-Agent: module5-probe'               "https://api.github.com/repos/$r/branches?per_page=100" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d if isinstance(d,dict) else [x.get("name") for x in d])' || true
           done
-
-          if [ -z "$found" ]; then
-            echo "No public s4/end README found."
-            exit 2
-          fi
-
-          echo "SOURCE=$found"
-          echo "---- README START ----"
-          cat /tmp/readme
-          echo "---- README END ----"
-
-          archive="https://codeload.github.com/$found/zip/refs/heads/s4/end"
-          curl -L -fSs -H 'User-Agent: module5-probe' "$archive" -o /tmp/source.zip
-          mkdir /tmp/source
-          cd /tmp/source
-          unzip -q /tmp/source.zip
-          srcdir="$(find . -mindepth 1 -maxdepth 1 -type d | head -n1)"
-          cd "$srcdir"
-
-          rm -rf .git
-          git init -q
-          git config user.name "jfcastellot"
-          git config user.email "jfcastellot@users.noreply.github.com"
-          git add -A
-          git commit -qm "mirror: official s4/end for module 5"
-          git branch -M s5/start
-          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" s5/start:s5/start --force
