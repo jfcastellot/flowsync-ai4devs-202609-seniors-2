@@ -1,0 +1,59 @@
+name: probe-s5-http
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find and mirror s5/start with public HTTP
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          found=""
+          for r in             LIDR-academy/flowsync-ai4devs-202609-seniors-2             LIDR-academy/flowsync-ai4devs             LIDR-academy/flowsync-ai4devs-202609-seniors-1
+          do
+            echo "Checking raw README for $r"
+            raw="https://raw.githubusercontent.com/$r/s5/start/README.md"
+            status="$(curl -L -sS -o /tmp/readme -w '%{http_code}' -H 'User-Agent: module5-probe' "$raw" || true)"
+            echo "HTTP $status for $raw"
+            if [ "$status" = "200" ]; then
+              found="$r"
+              echo "FOUND $r"
+              break
+            fi
+          done
+
+          if [ -z "$found" ]; then
+            echo "No public s5/start README found."
+            exit 2
+          fi
+
+          echo "SOURCE=$found"
+          echo "---- README START ----"
+          cat /tmp/readme
+          echo "---- README END ----"
+
+          archive="https://codeload.github.com/$found/zip/refs/heads/s5/start"
+          curl -L -fSs -H 'User-Agent: module5-probe' "$archive" -o /tmp/source.zip
+          mkdir /tmp/source
+          cd /tmp/source
+          unzip -q /tmp/source.zip
+          srcdir="$(find . -mindepth 1 -maxdepth 1 -type d | head -n1)"
+          cd "$srcdir"
+
+          rm -rf .git
+          git init -q
+          git config user.name "jfcastellot"
+          git config user.email "jfcastellot@users.noreply.github.com"
+          git add -A
+          git commit -qm "mirror: official s5/start"
+          git branch -M s5/start
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" s5/start:s5/start --force
